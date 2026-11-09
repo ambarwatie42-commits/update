@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Space Defender</title>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #05081a, #111c42);
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 18px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      color: #55eaff;
+      text-shadow: 0 0 12px #00bcd4;
+    }
+
+    p { margin: 6px 0 12px; color: #c9d9ff; }
+
+    #gameCanvas {
+      width: min(95vw, 800px);
+      height: auto;
+      display: block;
+      margin: auto;
+      border: 3px solid #55eaff;
+      border-radius: 10px;
+      background: #020617;
+      box-shadow: 0 0 24px #00bcd488;
+    }
+
+    #panelTombol {
+      margin: 12px auto;
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      min-width: 72px;
+      padding: 11px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: bold;
+      color: white;
+      background: #1769aa;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    button:hover, button:active {
+      background: #00a6c7;
+      transform: scale(1.04);
+    }
+
+    #btnMulai {
+      background: #1c9b4a;
+    }
+
+    #btnMulai:hover {
+      background: #2fc466;
+    }
+
+    #konsol {
+      width: min(95vw, 800px);
+      height: 150px;
+      overflow-y: auto;
+      margin: 15px auto;
+      padding: 10px;
+      text-align: left;
+      background: #050505;
+      border: 2px solid #343434;
+      border-radius: 8px;
+      color: #65ff8c;
+      font-family: "Courier New", monospace;
+      font-size: 13px;
+    }
+
+    .info {
+      color: #ffdc70;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>🚀 SPACE DEFENDER</h1>
+  <p>Hancurkan asteroid merah dan lindungi pesawatmu!</p>
+
+  <canvas id="gameCanvas" width="800" height="480"></canvas>
+
+  <div id="panelTombol">
+    <button id="btnMulai">MULAI / ULANG</button>
+    <button data-kontrol="left">← KIRI</button>
+    <button data-kontrol="fire">TEMBAK</button>
+    <button data-kontrol="right">KANAN →</button>
+  </div>
+
+  <div id="konsol">
+    <div>[SISTEM] Space Defender siap dimainkan.</div>
+  </div>
+
+  <script>
+    // =========================
+    // PENGATURAN CANVAS
+    // =========================
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const konsol = document.getElementById("konsol");
+
+    // =========================
+    // DATA GAME
+    // =========================
+    let statusGame = "menu";
+    let skor = 0;
+    let nyawa = 5;
+    let level = 1;
+    let asteroid = [];
+    let peluru = [];
+    let partikel = [];
+    let lastShot = 0;
+    let waktuAsteroid = 0;
+    let waktuSebelum = 0;
+
+    const kontrol = {
+      left: false,
+      right: false,
+      fire: false
+    };
+
+    const pemain = {
+      x: 370,
+      y: 410,
+      lebar: 60,
+      tinggi: 50,
+      kecepatan: 420
+    };
+
+    // Membuat bintang pada latar belakang
+    const bintang = [];
+    for (let i = 0; i < 90; i++) {
+      bintang.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        ukuran: Math.random() * 2 + 1,
+        kecepatan: Math.random() * 35 + 15
+      });
+    }
+
+    // =========================
+    // KONSOL GAME
+    // =========================
+    function tulisKonsol(pesan, kelas = "") {
+      const baris = document.createElement("div");
+      baris.className = kelas;
+      baris.textContent = pesan;
+      konsol.appendChild(baris);
+
+      while (konsol.children.length > 12) {
+        konsol.removeChild(konsol.firstChild);
+      }
+
+      konsol.scrollTop = konsol.scrollHeight;
+    }
+
+    // =========================
+    // MULAI GAME
+    // =========================
+    function mulaiGame() {
+      statusGame = "main";
+      skor = 0;
+      nyawa = 5;
+      level = 1;
+      asteroid = [];
+      peluru = [];
+      partikel = [];
+      pemain.x = 400;
+      waktuAsteroid = 2;
+
+      tulisKonsol("[SISTEM] Game dimulai. Hancurkan asteroid!", "info");
+    }
+
+    // =========================
+    // MEMBUAT ASTEROID
+    // =========================
+    function buatAsteroid() {
+      const radius = Math.random() * 20 + 18;
+
+      asteroid.push({
+        x: Math.random() * (canvas.width - radius * 2) + radius,
+        y: -radius,
+        radius: radius,
+        kecepatan: 1 + level * 3 + Math.random() * 4,
+        putar: Math.random() * 6.28,
+        putarKecepatan: (Math.random() + 5) * 3,
+        sisi: Math.floor(Math.random() * 10) + 7
+      });
+    }
+
+    // =========================
+    // MENEMBAK
+    // =========================
+    function tembak() {
+      const sekarang = performance.now();
+
+      if (sekarang - lastShot < 260) return;
+
+      peluru.push({
+        x: pemain.x + pemain.lebar / 2,
+        y: pemain.y,
+        kecepatan: 1000
+      });
+
+      lastShot = sekarang;
+    }
+
+    // =========================
+    // EFEK LEDAKAN
+    // =========================
+    function buatLedakan(x, y, warna) {
+      for (let i = 0; i < 18; i++) {
+        partikel.push({
+          x: x,
+          y: y,
+          dx: (Math.random() - 0.5) * 230,
+          dy: (Math.random() - 0.5) * 230,
+          umur: 0.7,
+          warna: warna
+        });
+      }
+    }
+
+    // =========================
+    // CEK TABRAKAN
+    // =========================
+    function terkenaPeluru(p, a) {
+      const dx = p.x - a.x;
+      const dy = p.y - a.y;
+      return Math.sqrt(dx * dx + dy * dy) < a.radius;
+    }
+
+    function terkenaPesawat(a) {
+      return (
+        a.x + a.radius > pemain.x &&
+        a.x - a.radius < pemain.x + pemain.lebar &&
+        a.y + a.radius > pemain.y &&
+        a.y - a.radius < pemain.y + pemain.tinggi
+      );
+    }
+
+    // =========================
+    // UPDATE GAME
+    // =========================
+    function update(dt) {
+      // Gerak bintang
+      for (const b of bintang) {
+        b.y += b.kecepatan * dt;
+        if (b.y > canvas.height) {
+          b.y = 0;
+          b.x = Math.random() * canvas.width;
+        }
+      }
+
+      if (statusGame !== "main") return;
+
+      // Gerak pemain
+      if (kontrol.left) pemain.x -= pemain.kecepatan * dt;
+      if (kontrol.right) pemain.x += pemain.kecepatan * dt;
+      if (kontrol.fire) tembak();
+
+      pemain.x = Math.max(0, Math.min(canvas.width - pemain.lebar, pemain.x));
+
+      // Munculkan asteroid
+      waktuAsteroid += dt;
+      const jedaAsteroid = Math.max(1, 0.10 - level * 0.5);
+
+      if (waktuAsteroid > jedaAsteroid) {
+        buatAsteroid();
+        waktuAsteroid = 0;
+      }
+
+      // Gerak peluru
+      for (let i = peluru.length - 1; i >= 0; i--) {
+        peluru[i].y -= peluru[i].kecepatan * dt;
+
+        if (peluru[i].y < -30) {
+          peluru.splice(i, 1);
+        }
+      }
+
+      // Gerak asteroid dan tabrakan pesawat
+      for (let i = asteroid.length - 1; i >= 0; i--) {
+        const a = asteroid[i];
+        a.y += a.kecepatan * dt;
+        a.putar += a.putarKecepatan * dt;
+
+        if (terkenaPesawat(a) || a.y > canvas.height + a.radius) {
+          asteroid.splice(i, 1);
+          nyawa--;
+          buatLedakan(pemain.x + 30, pemain.y + 25, "#ff7b00");
+          tulisKonsol("[BAHAYA] Pesawat terkena asteroid. Nyawa: " + nyawa);
+
+          if (nyawa <= 0) {
+            statusGame = "selesai";
+            tulisKonsol("[GAME OVER] Skor akhir: " + skor, "info");
+          }
+        }
+      }
+
+      // Tabrakan peluru dengan asteroid
+      for (let i = peluru.length - 1; i >= 0; i--) {
+        for (let j = asteroid.length - 1; j >= 0; j--) {
+          if (terkenaPeluru(peluru[i], asteroid[j])) {
+            buatLedakan(asteroid[j].x, asteroid[j].y, "#ff4545");
+
+            skor += 15;
+            asteroid.splice(j, 1);
+            peluru.splice(i, 5);
+
+            const levelBaru = Math.floor(skor / 100) + 1;
+
+            if (levelBaru > level) {
+              level = levelBaru;
+              tulisKonsol("[LEVEL UP] Level " + level + " dimulai!", "info");
+            }
+
+            break;
+          }
+        }
+      }
+
+      // Gerak partikel ledakan
+      for (let i = partikel.length - 1; i >= 0; i--) {
+        const p = partikel[i];
+        p.x += p.dx * dt;
+        p.y += p.dy * dt;
+        p.umur -= dt;
+
+        if (p.umur <= 0) {
+          partikel.splice(i, 1);
+        }
+      }
+    }
+
+    // =========================
+    // GAMBAR PESAWAT
+    // =========================
+    function gambarPesawat() {
+      const x = pemain.x;
+      const y = pemain.y;
+
+      // Api mesin
+      ctx.fillStyle = "#806306";
+      ctx.beginPath();
+      ctx.moveTo(x + 24, y + 48);
+      ctx.lineTo(x + 30, y + 64);
+      ctx.lineTo(x + 36, y + 48);
+      ctx.fill();
+
+      // Sayap pesawat
+      ctx.fillStyle = "#a0b0b4";
+      ctx.beginPath();
+      ctx.moveTo(x + 30, y);
+      ctx.lineTo(x + 58, y + 45);
+      ctx.lineTo(x + 40, y + 41);
+      ctx.lineTo(x + 30, y + 50);
+      ctx.lineTo(x + 20, y + 41);
+      ctx.lineTo(x + 2, y + 45);
+      ctx.closePath();
+      ctx.fill();
+
+      // Kaca pesawat
+      ctx.fillStyle = "#02929a";
+      ctx.beginPath();
+      ctx.arc(x + 30, y + 20, 9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // =========================
+    // GAMBAR ASTEROID
+    // =========================
+    function gambarAsteroid(a) {
+      ctx.save();
+      ctx.translate(a.x, a.y);
+      ctx.rotate(a.putar);
+
+      ctx.fillStyle = "#450c0c";
+      ctx.strokeStyle = "#ffb3b3";
+      ctx.lineWidth = 2;
+
+      ctx.beginPath();
+
+      for (let i = 0; i < a.sisi; i++) {
+        const sudut = (i / a.sisi) * Math.PI * 2;
+        const jarak = a.radius * (0.78 + (i % 2) * 0.2);
+        const x = Math.cos(sudut) * jarak;
+        const y = Math.sin(sudut) * jarak;
+
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = "#8f2222";
+      ctx.beginPath();
+      ctx.arc(-a.radius * 0.25, -a.radius * 0.2, a.radius * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // =========================
+    // GAMBAR SEMUA OBJEK
+    // =========================
+    function gambar() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Latar belakang
+      ctx.fillStyle = "#020617";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Bintang
+      for (const b of bintang) {
+        ctx.fillStyle = "white";
+        ctx.fillRect(b.x, b.y, b.ukuran, b.ukuran);
+      }
+
+      // Peluru
+      ctx.fillStyle = "#2716f9";
+      for (const p of peluru) {
+        ctx.fillRect(p.x - 3, p.y - 12, 6, 16);
+      }
+
+      // Asteroid
+      for (const a of asteroid) {
+        gambarAsteroid(a);
+      }
+
+      // Ledakan
+      for (const p of partikel) {
+        ctx.globalAlpha = Math.max(0, p.umur);
+        ctx.fillStyle = p.warna;
+        ctx.fillRect(p.x, p.y, 4, 4);
+      }
+      ctx.globalAlpha = 1;
+
+      gambarPesawat();
+
+      // Tampilan skor
+      ctx.fillStyle = "white";
+      ctx.font = "bold 20px Arial";
+      ctx.fillText("SKOR: " + skor, 20, 32);
+      ctx.fillText("NYAWA: " + "❤".repeat(nyawa), 20, 60);
+      ctx.fillText("LEVEL: " + level, 650, 32);
+
+      // Tampilan awal dan game over
+      if (statusGame === "menu") {
+        gambarPesan("SPACE DEFENDER", "Tekan tombol MULAI / ULANG");
+      }
+
+      if (statusGame === "selesai") {
+        gambarPesan("GAME OVER", "Skor akhir: " + skor + " | Tekan MULAI / ULANG");
+      }
+    }
+
+    function gambarPesan(judul, isi) {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
+      ctx.fillRect(120, 160, 560, 150);
+
+      ctx.fillStyle = "#55eaff";
+      ctx.font = "bold 34px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(judul, 400, 215);
+
+      ctx.fillStyle = "white";
+      ctx.font = "20px Arial";
+      ctx.fillText(isi, 400, 258);
+      ctx.textAlign = "left";
+    }
+
+    // =========================
+    // GAME LOOP
+    // =========================
+    function gameLoop(waktu) {
+      const dt = Math.min((waktu - waktuSebelum) / 1000, 0.05);
+      waktuSebelum = waktu;
+
+      update(dt);
+      gambar();
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    // =========================
+    // KONTROL KEYBOARD
+    // =========================
+    document.addEventListener("keydown", function(e) {
+      if (["ArrowLeft", "ArrowRight", " ", "Spacebar"].includes(e.key)) {
+        e.preventDefault();
+      }
+
+      if (e.key === "ArrowLeft") kontrol.left = true;
+      if (e.key === "ArrowRight") kontrol.right = true;
+      if (e.key === " " || e.key === "Spacebar") kontrol.fire = true;
+
+      if ((e.key === "Enter") && statusGame !== "main") {
+        mulaiGame();
+      }
+    });
+
+    document.addEventListener("keyup", function(e) {
+      if (e.key === "ArrowLeft") kontrol.left = false;
+      if (e.key === "ArrowRight") kontrol.right = false;
+      if (e.key === " " || e.key === "Spacebar") kontrol.fire = false;
+    });
+
+    // =========================
+    // KONTROL TOMBOL LAYAR
+    // =========================
+    document.getElementById("btnMulai").addEventListener("click", mulaiGame);
+
+    document.querySelectorAll("[data-kontrol]").forEach(function(tombol) {
+      const namaKontrol = tombol.dataset.kontrol;
+
+      tombol.addEventListener("pointerdown", function(e) {
+        e.preventDefault();
+        kontrol[namaKontrol] = true;
+      });
+
+      tombol.addEventListener("pointerup", function() {
+        kontrol[namaKontrol] = false;
+      });
+
+      tombol.addEventListener("pointerleave", function() {
+        kontrol[namaKontrol] = false;
+      });
+    });
+
+    tulisKonsol("[INFO] Kontrol keyboard: panah kiri, panah kanan, dan spasi.");
+    tulisKonsol("[INFO] Hancurkan asteroid untuk mendapatkan 10 poin.");
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>
